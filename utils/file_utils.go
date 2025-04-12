@@ -1,9 +1,16 @@
 package utils
 
 import (
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 )
+
+func IsValidFileType(file []byte) bool {
+	fileType := http.DetectContentType(file)
+	return strings.HasPrefix(fileType, "image/")
+}
 
 func CreateFile(filename string) (*os.File, error) {
 	//create uploads directory if not peresent

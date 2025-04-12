@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"go_file_server/utils"
+	"io"
 	"net/http"
 	"os"
 )
@@ -35,9 +36,14 @@ func main() {
 }
 
 func fileUploadHandler(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 32<<20+512) //limit request size to 32MB
+	defer r.Body.Close()
 
-	// Limit file size to 10MB
-	r.ParseMultipartForm(10 << 20)
+	// Limit file size in RAM to 32MB
+	err := r.ParseMultipartForm(32 << 20)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	}
 
 	//get file from form data
 	file, handler, err := r.FormFile("myFile")
@@ -47,9 +53,18 @@ func fileUploadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	fmt.Fprintf(w, "Uploaded File: %s\n", handler.Filename)
-	fmt.Fprint(w, "File Size: %d\n", handler.Size)
-	fmt.Fprint(w, "MIME Header: %v\n", handler.Header)
+	//Read file bytes from memory
+	fileBytes, err := io.ReadAll(file)
+	if err != nil {
+		http.Error(w, "Invalid file", http.StatusBadRequest)
+		return
+	}
+
+	//validate file type
+	if !utils.IsValidFileType(fileBytes) {
+		http.Error(w, "Invalid file", http.StatusBadRequest)
+		return
+	}
 
 	// save locally
 	dst, err := utils.CreateFile(handler.Filename)
@@ -59,8 +74,19 @@ func fileUploadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer dst.Close()
 
+	//Write file to disk
+	_, err = dst.Write(fileBytes)
+	if err != nil {
+		http.Error(w, "Error saving the file to disk", http.StatusInternalServerError)
+	}
+
 	// copy uploaded file to destination file
-	if _, err := dst.ReadFrom(file); err != nil {
+	_, err = dst.ReadFrom(file)
+	if err != nil {
 		http.Error(w, "Error saving the file", http.StatusInternalServerError)
 	}
+
+	fmt.Fprintf(w, "Uploaded File: %s\n", handler.Filename)
+	fmt.Print(w, "File Size: %d\n", handler.Size)
+	fmt.Print(w, "MIME Header: %v\n", handler.Header)
 }
