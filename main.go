@@ -36,7 +36,7 @@ func main() {
 }
 
 func fileUploadHandler(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, 32<<20+512) //limit request size to 32MB
+	r.Body = http.MaxBytesReader(w, r.Body, 32<<20+512) //limit request size to 32MB by wrapping r.Body reader function with memory limit
 	defer r.Body.Close()
 
 	// Limit file size in RAM to 32MB
@@ -56,20 +56,20 @@ func fileUploadHandler(w http.ResponseWriter, r *http.Request) {
 	//Read file bytes from memory
 	fileBytes, err := io.ReadAll(file)
 	if err != nil {
-		http.Error(w, "Invalid file", http.StatusBadRequest)
+		http.Error(w, "Invalid file, failed top read bytes from memory", http.StatusBadRequest)
 		return
 	}
 
 	//validate file type
 	if !utils.IsValidFileType(fileBytes) {
-		http.Error(w, "Invalid file", http.StatusBadRequest)
+		http.Error(w, "Invalid file type", http.StatusBadRequest)
 		return
 	}
 
 	// save locally
 	dst, err := utils.CreateFile(handler.Filename)
 	if err != nil {
-		http.Error(w, "Error saving the file", http.StatusInternalServerError)
+		http.Error(w, "Error saving the file locally", http.StatusInternalServerError)
 		return
 	}
 	defer dst.Close()
@@ -83,7 +83,7 @@ func fileUploadHandler(w http.ResponseWriter, r *http.Request) {
 	// copy uploaded file to destination file
 	_, err = dst.ReadFrom(file)
 	if err != nil {
-		http.Error(w, "Error saving the file", http.StatusInternalServerError)
+		http.Error(w, "Error copying uploaded file to destination", http.StatusInternalServerError)
 	}
 
 	fmt.Fprintf(w, "Uploaded File: %s\n", handler.Filename)
